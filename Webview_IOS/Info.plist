@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+   Info.plist
+   Webview_IOS
+
+   Created by Pablo Chaves on 22/08/23.
+   Copyright (c) 2023 ___ORGANIZATIONNAME___. All rights reserved.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Estás usando tu cámara para la videconferencia con uno de nuestros doctores</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Estás usando tu micrófono para la videconferencia con uno de nuestros doctores</string>
+</dict>
+</plist>
