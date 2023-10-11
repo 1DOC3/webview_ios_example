@@ -83,32 +83,32 @@ struct WebViewContainer: UIViewRepresentable {
                             // Asignar el nombre y el valor de la cookie
                             HTTPCookieStorage.shared.setCookie(cookie)
                         }
-                    }
-                    
-                    var request = URLRequest(url: url)
 
-                    let cookies = HTTPCookieStorage.shared.cookies(for: url)!
-                    let headers = HTTPCookie.requestHeaderFields(with: cookies)
+                         var request = URLRequest(url: url)
 
-                    request.allHTTPHeaderFields = headers
-                    
-                    // Crear una tarea de datos para la solicitud GET
-                    let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
-                        if let error = error {
-                            print("Error: \(error)")
-                        } else if  let httpResponse = response as? HTTPURLResponse{
-                            if httpResponse.statusCode == 200, let redirectURL = httpResponse.url {
-                                self.downloadFileInExternalBrowser(redirectURL)
-                               
-                            } else {
-                               // La respuesta no es una redirección o no contiene la URL de redirección
-                               let str = String(data: data!, encoding: .utf8)
-                               print("Received data:\n\(str ?? "")")
-                           }
+                        let cookies = HTTPCookieStorage.shared.cookies(for: url)!
+                        let headers = HTTPCookie.requestHeaderFields(with: cookies)
+
+                        request.allHTTPHeaderFields = headers
+                        
+                        // Crear una tarea de datos para la solicitud GET
+                        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+                            if let error = error {
+                                print("Error: \(error)")
+                            } else if  let httpResponse = response as? HTTPURLResponse{
+                                if httpResponse.statusCode == 200, let redirectURL = httpResponse.url {
+                                    self.downloadFileInExternalBrowser(redirectURL)
+                                
+                                } else {
+                                // La respuesta no es una redirección o no contiene la URL de redirección
+                                let str = String(data: data!, encoding: .utf8)
+                                print("Received data:\n\(str ?? "")")
+                            }
+                            }
                         }
-                    }
 
-                    task.resume()
+                        task.resume()
+                    }
                     
                     decisionHandler(.cancel)
                     return
