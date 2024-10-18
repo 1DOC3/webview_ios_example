@@ -17,20 +17,26 @@ struct WebViewContainer: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         // Configuración de preferencias del WKWebView
         let webViewPrefs = WKPreferences()
-        webViewPrefs.javaScriptCanOpenWindowsAutomatically = true
+        webViewPrefs.javaScriptCanOpenWindowsAutomatically = false
         
         // Configuración de la instancia de WKWebView
         let webViewConf = WKWebViewConfiguration()
         webViewConf.preferences = webViewPrefs
         webViewConf.allowsInlineMediaPlayback = true // Configuración que evita pantalla de video en negro
         webViewConf.mediaTypesRequiringUserActionForPlayback = []
-                
+        
         let webView = WKWebView(frame: CGRect.zero, configuration: webViewConf)
+        // Habilita el inspeccionamiento del WebView
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = true
+        }
+        
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.scrollView.keyboardDismissMode = .onDrag
         
         // Asigna el delegado de navegación
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
 
         return webView
     }
@@ -49,8 +55,9 @@ struct WebViewContainer: UIViewRepresentable {
     }
     
     // Coordinador que actúa como delegado de navegación
-    class Coordinator: NSObject, WKNavigationDelegate {
+    class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, QLPreviewControllerDataSource {
         var parent: WebViewContainer
+        var lastDownloadedPDFURL: URL?
         
         init(_ parent: WebViewContainer) {
             self.parent = parent
@@ -113,9 +120,23 @@ struct WebViewContainer: UIViewRepresentable {
                     decisionHandler(.cancel)
                     return
                 }
+
+                if url.path.contains("/api/prescription-pdf") {
+                    handlePrescriptionPdfDownload(webView: webView, url: url)
+                    decisionHandler(.cancel)
+                    return
+                }
             }
             // Permitir la navegación normal en otras URL
             decisionHandler(.allow)
+        }
+
+        // Implementar WKUIDelegate para manejar nuevas ventanas
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if let url = navigationAction.request.url {
+                webView.load(URLRequest(url: url))
+            }
+            return nil
         }
         
         // Función para verificar si la URL es un archivo descargable (personaliza según tus necesidades)
@@ -168,6 +189,81 @@ struct WebViewContainer: UIViewRepresentable {
             } else {
                 print("No se puede abrir la URL en el navegador externo")
             }
+        }
+
+        func handlePrescriptionPdfDownload(webView: WKWebView, url: URL) {
+            let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
+            cookieStore.getAllCookies { cookies in
+                var request = URLRequest(url: url)
+                
+                // Agregar cookies a la solicitud
+                let headers = HTTPCookie.requestHeaderFields(with: cookies)
+                request.allHTTPHeaderFields = headers
+                
+                // Crear una tarea de datos para la solicitud GET
+                let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+                    if let error = error {
+                        print("Error al descargar el PDF: \(error)")
+                        return
+                    }
+                    
+                    guard let httpResponse = response as? HTTPURLResponse,
+                          httpResponse.statusCode == 200,
+                          let data = data else {
+                        print("Respuesta inválida o sin datos")
+                        return
+                    }
+                    
+                    // Obtener el nombre del archivo del header Content-Disposition
+                    var filename = "prescription.pdf"
+                    if let disposition = httpResponse.allHeaderFields["Content-Disposition"] as? String {
+                        let filenamePattern = "filename=\"?(.+)\"?"
+                        if let range = disposition.range(of: filenamePattern, options: .regularExpression) {
+                            filename = String(disposition[range].dropFirst(9).dropLast())
+                        }
+                    }
+                    
+                    // Asegurar que el nombre del archivo termina con .pdf
+                    if !filename.lowercased().hasSuffix(".pdf") {
+                        filename += ".pdf"
+                    }
+                    
+                    // Guardar el archivo PDF
+                    self.savePDF(data: data, filename: filename)
+                }
+                task.resume()
+            }
+        }
+        
+        func savePDF(data: Data, filename: String) {
+            let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let fileURL = documentsDirectory.appendingPathComponent(filename)
+            
+            do {
+                try data.write(to: fileURL)
+                print("PDF guardado en: \(fileURL.path)")
+                self.lastDownloadedPDFURL = fileURL
+                
+                DispatchQueue.main.async {
+                    // Mostrar una alerta o iniciar la vista previa del PDF
+                    let previewController = QLPreviewController()
+                    previewController.dataSource = self
+                    
+                    if let topViewController = UIApplication.shared.windows.first?.rootViewController {
+                        topViewController.present(previewController, animated: true, completion: nil)
+                    }
+                }
+            } catch {
+                print("Error al guardar el PDF: \(error)")
+            }
+        }
+        
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            return lastDownloadedPDFURL != nil ? 1 : 0
+        }
+                
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            return lastDownloadedPDFURL as QLPreviewItem? ?? URL(fileURLWithPath: "") as QLPreviewItem
         }
     }
 }
